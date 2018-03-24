@@ -29,20 +29,6 @@ class Analyzer:
         """
         random.seed(1)
         self.num_stops = 20
-        """
-        # To accurately represent population weights, multiply the location data by the
-        # population. E.g. (36, -77, 120) becomes 120 copies of (36, -77).
-        # Each population point will be randomly distributed within the bounding box for that block.            
-        """
-        self.read_df()
-        big_data = []
-        for indx, row in self.df.iterrows():
-            for _ in range(int(row['pop'])):
-                lat_1, lat_2, lon_1, lon_2  = row['bbox_lat1':'bbox_lon2']
-                lat = random.uniform(lat_1, lat_2)
-                lon = random.uniform(lon_1, lon_2)
-                big_data.append([lat, lon])
-        self.kmeans(np.array(big_data))
 
     def calc_centroid(self, points_arr):
         """
@@ -103,6 +89,21 @@ class Analyzer:
         with pd.HDFStore('store.h5') as store:
             self.df = store['df']
 
+    def gen_big_arr(self):
+        """
+        To accurately represent population weights, multiply the location data by the
+        population. E.g. (36, -77, 120) becomes 120 copies of (36, -77).
+        Each population point will be randomly distributed within the bounding box for that block.            
+        """
+        big_data = []
+        for indx, row in self.df.iterrows():
+            for _ in range(int(row['pop'])):
+                lat_1, lat_2, lon_1, lon_2  = row['bbox_lat1':'bbox_lon2']
+                lat = random.uniform(lat_1, lat_2)
+                lon = random.uniform(lon_1, lon_2)
+                big_data.append([lat, lon])
+        self.big_arr = np.array(big_data)
+    
     def kmeans(self, arr):
         """
         K-means cluster analysis
@@ -114,15 +115,14 @@ class Analyzer:
         For example, arr[i] maps to cluster km.cluster_centers_[km.labels_[i]]
         """
         km = KMeans(n_clusters=self.num_stops, random_state=0).fit(arr)
-        #print(km.labels_, km.cluster_centers_)
         cl_cent = km.cluster_centers_
         plt.figure()
         plt.scatter(arr[:,0], arr[:,1], s=0.25, c='blue')
         plt.scatter(cl_cent[:,0], cl_cent[:,1], s=0.75, c='red')
         plt.show()
 
-    def graph_shapefile(self):
-        sf = shapefile.Reader('tl_2010_51013_tabblock10/tl_2010_51013_tabblock10.shp')
+    def graph_shapefile(self, file):
+        sf = shapefile.Reader(file)
         plt.figure()
         for shape in sf.shapeRecords():
             x = [i[0] for i in shape.shape.points[:]]
@@ -132,4 +132,8 @@ class Analyzer:
 
 
 if __name__ == '__main__':
-    pass
+    A = Analyzer()
+    A.read_df()
+    A.gen_big_arr()
+    A.kmeans(A.big_arr)
+    #A.graph_shapefile('tl_2010_51013_tabblock10/tl_2010_51013_tabblock10.shp')
