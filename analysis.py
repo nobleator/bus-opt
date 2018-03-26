@@ -1,4 +1,5 @@
 # TODO: Distance via Haversine
+# TODO: Compare results to IRL bus stops/routes/travel times
 
 
 import re
@@ -130,8 +131,41 @@ class Analyzer:
             plt.plot(x,y)
         plt.show()
 
+    def total_travel_time(self, num_stops, num_buses):
+        """
+        Takes a number of bus stops and a list bus routes (one route per bus)
+        and calculcates total time "cost".
+
+        Random average personal drive distance (bounds?)
+        Average bus travel distance = total loop distance / 2
+        Average wait time = ???
+        If distance to stop > X or wait time > Y then pop drives themselves
+        Report total travel time, buses + cars
+
+        Assumptions:
+        Bus stops are determined via k-means clustering (k can vary)
+        80% of pops travel somewhere.
+        Pops will walk up to 0.25mi to a bus stop.
+        If a pop needs to travel but isn't close enough to a bus stop, they will drive.
+        Every pop that drives themselves adds to traffic.
+        Traffic includes all buses plus all pops that drive.
+        Driving speed is inversely proportional to traffic.
+        All vehicles use the same driving speed.
+        Travel time = distance / driving speed
+        Buses have a fixed total capacity.
+        Demand is always met before supply (to avoid satisfying demand with the same pops that started at that node)
+        """
+        return None
 
 if __name__ == '__main__':
+    """
+    Generate all possible routes for given number of buses and stops.
+    Assume no 2 buses take the same route (modify later?).
+    Calculate total travel time (see method total_travel_time).
+    Heuristics for route construction:
+        Clustering of bus stops
+
+    """
     A = Analyzer()
     A.read_df()
     A.gen_big_arr()
