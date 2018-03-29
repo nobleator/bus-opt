@@ -159,12 +159,12 @@ class Analyzer:
 
 if __name__ == '__main__':
     """
-    Generate all possible routes for given number of buses and stops.
-    Assume no 2 buses take the same route (modify later?).
-    Calculate total travel time (see method total_travel_time).
-    Heuristics for route construction:
-        Clustering of bus stops
-
+    Explain how optimization is computationally prohibitive
+    Function to measure performance (total travel + wait times)
+    K-means to generate stops
+    DBSCAN to generate routes (modify to include 1+ source and 1+ demand node)
+    TSP to optimize pathing within routes (Google ortools)
+    Generate random supply and demand and simulate to generate results table
     """
     A = Analyzer()
     A.read_df()
