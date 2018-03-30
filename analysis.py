@@ -85,6 +85,7 @@ class Analyzer:
         self.df = pd.DataFrame(data)
         with pd.HDFStore('store.h5') as store:
             store['df'] = self.df
+        self.df.to_pickle('store.pkl')
 
     def read_df(self):
         with pd.HDFStore('store.h5') as store:
@@ -122,6 +123,36 @@ class Analyzer:
         plt.scatter(cl_cent[:,0], cl_cent[:,1], s=0.75, c='red')
         plt.show()
 
+    def k_db_tsp(self):
+        """
+        K-means + DBSCAN + TSP
+        Use k-means to generate population clusters, which correspond to bus stop locations.
+        Use DBSCAN to create clusters of bus stops (using the results from k-means) to generate routes.
+        Use traveling salesman problem algorithm to optimize path within routes.
+        """
+        return None
+
+    def k_mst_tsp(self):
+        """
+        K-means + altered minimum spanning tree + TSP
+        Use k-means to generate population clusters, which correspond to bus stop locations.
+        """
+        return None
+
+    def k_sa_vrp(self):
+        """
+        K-means + simulated annealing vehicle routing heuristic
+        Use k-means to generate population clusters, which correspond to bus stop locations.
+        """
+        return None
+
+    def k_ga_vrp(self):
+        """
+        K-means + genetic algorithm vehicle routing heuristic
+        Use k-means to generate population clusters, which correspond to bus stop locations.
+        """
+        return None
+
     def graph_shapefile(self, file):
         sf = shapefile.Reader(file)
         plt.figure()
@@ -157,6 +188,7 @@ class Analyzer:
         """
         return None
 
+
 if __name__ == '__main__':
     """
     Explain how optimization is computationally prohibitive
@@ -167,7 +199,8 @@ if __name__ == '__main__':
     Generate random supply and demand and simulate to generate results table
     """
     A = Analyzer()
-    A.read_df()
-    A.gen_big_arr()
-    A.kmeans(A.big_arr)
+    A.gen_df()
+    #A.read_df()
+    #A.gen_big_arr()
+    #A.kmeans(A.big_arr)
     #A.graph_shapefile('tl_2010_51013_tabblock10/tl_2010_51013_tabblock10.shp')
