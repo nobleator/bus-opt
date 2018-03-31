@@ -7,7 +7,7 @@ import random
 import shapefile
 import numpy as np
 import pandas as pd
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, DBSCAN
 import matplotlib.pyplot as plt
 
 
@@ -125,16 +125,21 @@ class Analyzer:
 
     def k_db_tsp(self):
         """
-        K-means + DBSCAN + TSP
+        K-means + DBSCAN + nearest neighbor/2-opt improvement TSP heuristic
         Use k-means to generate population clusters, which correspond to bus stop locations.
         Use DBSCAN to create clusters of bus stops (using the results from k-means) to generate routes.
         Use traveling salesman problem algorithm to optimize path within routes.
+        Nearest neighbor for initial route with 2-opt improvements.
         """
+        km = KMeans(n_clusters=self.num_stops, random_state=0).fit(self.big_arr)
+        cl_cent = km.cluster_centers_
+        db = DBSCAN(eps=0.35).fit(cl_cent)
+        print(len(set(db.labels_)) - 1)
         return None
 
     def k_mst_tsp(self):
         """
-        K-means + altered minimum spanning tree + TSP
+        K-means + altered minimum spanning tree + nearest neighbor/2-opt improvement TSP heuristic
         Use k-means to generate population clusters, which correspond to bus stop locations.
         """
         return None
@@ -162,9 +167,9 @@ class Analyzer:
             plt.plot(x,y)
         plt.show()
 
-    def total_travel_time(self, num_stops, num_buses):
+    def total_travel_time(self, num_stops, routes):
         """
-        Takes a number of bus stops and a list bus routes (one route per bus)
+        Takes a number of bus stops and a list of bus routes
         and calculcates total time "cost".
 
         Random average personal drive distance (bounds?)
@@ -174,7 +179,6 @@ class Analyzer:
         Report total travel time, buses + cars
 
         Assumptions:
-        Bus stops are determined via k-means clustering (k can vary)
         80% of pops travel somewhere.
         Pops will walk up to 0.25mi to a bus stop.
         If a pop needs to travel but isn't close enough to a bus stop, they will drive.
@@ -183,24 +187,15 @@ class Analyzer:
         Driving speed is inversely proportional to traffic.
         All vehicles use the same driving speed.
         Travel time = distance / driving speed
-        Buses have a fixed total capacity.
-        Demand is always met before supply (to avoid satisfying demand with the same pops that started at that node)
         """
         return None
 
 
 if __name__ == '__main__':
-    """
-    Explain how optimization is computationally prohibitive
-    Function to measure performance (total travel + wait times)
-    K-means to generate stops
-    DBSCAN to generate routes (modify to include 1+ source and 1+ demand node)
-    TSP to optimize pathing within routes (Google ortools)
-    Generate random supply and demand and simulate to generate results table
-    """
     A = Analyzer()
-    A.gen_df()
-    #A.read_df()
-    #A.gen_big_arr()
+    #A.gen_df()
+    A.read_df()
+    A.gen_big_arr()
+    A.k_db_tsp()
     #A.kmeans(A.big_arr)
     #A.graph_shapefile('tl_2010_51013_tabblock10/tl_2010_51013_tabblock10.shp')
