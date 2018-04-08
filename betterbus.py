@@ -133,9 +133,9 @@ class BetterBus:
     def get_dist(self, p1, p2):
         return ((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)**0.5
 
-    def nx_mst(self, n_stops):
+    def nx_mst(self, n_stops, points):
         ltic = time.time()
-        stops = KMeans(n_clusters=n_stops).fit(self.arr).cluster_centers_
+        stops = KMeans(n_clusters=n_stops).fit(points).cluster_centers_
         print('K-means done in {} sec'.format(time.time() - ltic))
         ltic = time.time()
         # NetworkX already has an implementation for MST.
@@ -149,28 +149,56 @@ class BetterBus:
         ltic = time.time()
         mst = nx.algorithms.minimum_spanning_tree(G)
         print('MST done in {} sec'.format(time.time() - ltic))
-        ltic = time.time()
-        # total_dist = sum([mst.adj[k1][k2]['weight']
-        #                   for k1 in mst.adj for k2 in mst.adj[k1]])
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.scatter(self.arr[:, 0], self.arr[:, 1], s=0.01, c='#5d8eec')
-        nx.draw_networkx(mst, positions, node_color='#F95151', node_size=5,
-                         with_labels=False)
-        plt.savefig('map_nx_{}.png'.format(n_stops), dpi=300)
-        # plt.show()
-        print('Plotting done in {} sec'.format(time.time() - ltic))
+        total_dist = sum([mst.adj[k1][k2]['weight']
+                          for k1 in mst.adj for k2 in mst.adj[k1]])
+        return mst, positions, total_dist
+
+    def christofides(self):
+        """
+        Algorithm:
+        1) Create minimum spanning tree of graph
+        2) Find all nodes with odd degree (odd number of arcs)
+        3) Create minimum weight perfect matching graph of nodes from 2)
+        4) Combine graphs from 1) and 3) (all nodes should have even degree)
+        5) Skip repeated nodes???
+        """
+        return None
+
+    def nearest_neighbor(self):
+        """
+        Algorithm:
+        1) Start at a random city
+        2) Find the nearest unvisited city and add to graph
+        3) Repeat 2) until all cities are visited
+        4) Repeat 1)-3) for a different random starting city
+        5) Select starting city (and route) with shortest route
+        """
+        return None
 
 
 if __name__ == '__main__':
     """
-    Do k-means to determine depot locations.
-    Split each depot region into bus regions with k-means.
-    Christofides TSP heuristic for each bus region.
-    County > k-means > Depots > k-means > Bus stops >
-    MST > Trees > Christofides > TSP routes > 2-opt > TSP routes
-    Given bus stop locations, create MSTs, one for each set of stops.
+    Variations:
+    Split county into various levels (buses, depots, etc) before routing.
+    Different TSP heuristics (Christofides, nearest neighbor, branch/bound).
+    Different clustering algorithms (k-means, k-median, DBSCAN).
+    Varying numbers of clusters/stops/buses/depots.
 
+    Add businesses as locations.
+    To incentivize routing between the two, artificially reduce the
+    weight on arcs between businesses and population centers.
+    Pop to pop arc = distance
+    Business to business arc = distance
+    Pop to business arc = 0.75 * distance
+
+    Methodology:
+    Split county into depot regions with k-means.
+    Split each depot region into bus regions with k-means.
+    TSP heuristic for each bus region.
+    County >k-means> Depots >k-means> Bus stops >TSP heuristic>
+    TSP routes >2-opt> TSP routes
+
+    How to connect routes with each other? For transfers, long-trips, etc.
     """
     tic = time.time()
     BB = BetterBus()
@@ -181,13 +209,69 @@ if __name__ == '__main__':
     toc = time.time()
     BB.gen_arr()
     print('gen_arr done in {} sec'.format(time.time() - toc))
-
-    # Population point color: #5d8eec
-    # Stop location color: #F95151
     toc = time.time()
-    for n in (50, 75, 100):
-        print('Beginning route {}'.format(n))
-        BB.nx_mst(n)
-        print('Route {0} done in {1} sec'.format(n, time.time() - toc))
+    n_depots = 2
+    n_buses = 20
+    n_stops = 200
+    n_stops_per_depot = n_stops // n_depots
+    n_buses_per_depot = n_buses // n_depots
+    n_stops_per_bus = n_stops_per_depot // n_buses_per_depot
+    fig = plt.figure()
+    ax = plt.subplot(111)
+    ax.set(adjustable='box', aspect=0.6)
+    ax.tick_params(axis='both', which='both', bottom='off',
+                   top='off', labelbottom='off', right='off',
+                   left='off', labelleft='off')
+    msg = '{0} n_depots, {1} n_buses_per_depot, {2} n_stops_per_bus'
+    ax.set_title(msg.format(n_depots, n_buses_per_depot, n_stops_per_bus),
+                 size=8)
+    ax.scatter(BB.arr[:, 0], BB.arr[:, 1], s=0.01, c='#5d8eec')
+    km_depots = KMeans(n_clusters=n_depots).fit(BB.arr)
+    for clust1 in range(n_depots):
+        ax.scatter(km_depots.cluster_centers_[:, 0],
+                   km_depots.cluster_centers_[:, 1], s=8, c='#00ff00')
+        depot_arr = BB.arr[np.where(km_depots.labels_ == clust1)]
+        km_routes = KMeans(n_clusters=n_buses_per_depot).fit(depot_arr)
+        for clust2 in range(n_buses_per_depot):
+            bus_arr = depot_arr[np.where(km_routes.labels_ == clust2)]
+            mst, positions, dist = BB.nx_mst(n_stops_per_bus, bus_arr)
+            nx.draw_networkx(mst, positions, node_color='#f95151',
+                             node_size=5, with_labels=False, ax=ax)
+    plt.savefig('map_single.png', dpi=400)
+    """
+
+    # Loop to compare different input values
+    n_depots = [1, 2, 3]
+    n_stops_per_depot = [25, 50]  # , 75, 100]
+    for depots in n_depots:
+        km = KMeans(n_clusters=depots).fit(BB.arr)
+        print('Depot cluster done in {} sec'.format(time.time() - toc))
         toc = time.time()
+        fig, axes = plt.subplots(round(len(n_stops_per_depot) / 2), 2)
+        for cluster in range(depots):
+            # Assign each point to new array corresponding to clusters
+            new_arr = BB.arr[np.where(km.labels_ == cluster)]
+            for i, n in enumerate(n_stops_per_depot):
+                print('Beginning depot {0} route {1}'.format(depots, n))
+                mst, positions, dist = BB.nx_mst(n, new_arr)
+                ax = axes[i]
+                ax.set(adjustable='box', aspect=0.6)
+                ax.tick_params(axis='both', which='both', bottom='off',
+                               top='off', labelbottom='off', right='off',
+                               left='off', labelleft='off')
+                ax.set_title('{} stops per depot'.format(n), size=8)
+                if cluster == 0:
+                    # Population dots, blue (#5d8eec)
+                    ax.scatter(BB.arr[:, 0], BB.arr[:, 1], s=0.01, c='#5d8eec')
+                # Bus stops, red (#f95151), and routes, black
+                nx.draw_networkx(mst, positions, node_color='#f95151',
+                                 node_size=5, with_labels=False, ax=ax)
+                msg = 'Depot {0} route {1} done in {2} sec'
+                print(msg.format(depots, n, time.time() - toc))
+                toc = time.time()
+        plt.savefig('map_{}depots.png'.format(depots), dpi=300)
+        # plt.show()
+        print('Plotting depot {0} done in {1} sec'.format(depots,
+                                                          time.time() - toc))
     print('Total time elapsed {} sec'.format(time.time() - tic))
+    """
