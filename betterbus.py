@@ -225,9 +225,11 @@ if __name__ == '__main__':
     msg = '{0} n_depots, {1} n_buses_per_depot, {2} n_stops_per_bus'
     ax.set_title(msg.format(n_depots, n_buses_per_depot, n_stops_per_bus),
                  size=8)
+    # Draw population (blue)
     ax.scatter(BB.arr[:, 0], BB.arr[:, 1], s=0.01, c='#5d8eec')
     km_depots = KMeans(n_clusters=n_depots).fit(BB.arr)
     for clust1 in range(n_depots):
+        # Draw depot centers (green)
         ax.scatter(km_depots.cluster_centers_[:, 0],
                    km_depots.cluster_centers_[:, 1], s=8, c='#00ff00')
         depot_arr = BB.arr[np.where(km_depots.labels_ == clust1)]
@@ -235,9 +237,12 @@ if __name__ == '__main__':
         for clust2 in range(n_buses_per_depot):
             bus_arr = depot_arr[np.where(km_routes.labels_ == clust2)]
             mst, positions, dist = BB.nx_mst(n_stops_per_bus, bus_arr)
+            # Draw stops (red) and routes (black)
             nx.draw_networkx(mst, positions, node_color='#f95151',
                              node_size=5, with_labels=False, ax=ax)
-    plt.savefig('map_single.png', dpi=400)
+    plt.savefig('map_d{0}b{1}s{2}.png'.format(n_depots,
+                                              n_buses_per_depot,
+                                              n_stops_per_bus), dpi=400)
     """
 
     # Loop to compare different input values
