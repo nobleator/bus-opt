@@ -131,19 +131,6 @@ class BetterBus:
         te = time.time()
         print('gen_arr() complete in {0} sec'.format(te - ts))
 
-    # TODO: Move to draw() (if possible)
-    def graph_shapefile(self):
-        ts = time.time()
-        sf = shapefile.Reader(self.sfile)
-        plt.figure()
-        for shape in sf.shapeRecords():
-            x = [i[0] for i in shape.shape.points[:]]
-            y = [i[1] for i in shape.shape.points[:]]
-            plt.plot(x, y, linewidth=0.1)
-        plt.show(block=False)
-        te = time.time()
-        print('graph_shapefile() complete in {0} sec'.format(te - ts))
-
     # TODO: Compare results to IRL bus stops/routes/travel times
     def performance(self, G):
         """
