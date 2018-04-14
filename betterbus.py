@@ -1,20 +1,16 @@
-# TODO: Distance via Haversine
-# TODO: Compare results to IRL bus stops/routes/travel times
-
-
 import re
 import random as rnd
 import shapefile
 import numpy as np
 import pandas as pd
-from sklearn.cluster import KMeans
+import sklearn.cluster as sk_cl
 import matplotlib.pyplot as plt
-import time
 import networkx as nx
 
 
 class BetterBus:
-    def __init__(self):
+    # TODO: Use try/except to generate vs read DataFrame
+    def __init__(self, n):
         """
         Set random_state to ensure repeatable outcome.
 
@@ -31,7 +27,13 @@ class BetterBus:
         Bus stops Arlington County VA catalog.data.gov
         """
         rnd.seed(1)
+        plt.style.use('bmh')
         self.sfile = 'tl_2010_51013_tabblock10/tl_2010_51013_tabblock10.shp'
+        self.n = n
+        self.gen_df()
+        print('gen_df() complete.')
+        self.gen_arr()
+        print('gen_arr() complete.')
 
     def calc_centroid(self, points_arr):
         """
@@ -115,6 +117,7 @@ class BetterBus:
                 data.append([lat, lon])
         self.arr = np.array(data)
 
+    # TODO: Move to draw() (if possible)
     def graph_shapefile(self):
         sf = shapefile.Reader(self.sfile)
         plt.figure()
@@ -124,45 +127,116 @@ class BetterBus:
             plt.plot(x, y)
         plt.show()
 
-    def performance(self, num_stops, routes):
+    # TODO: Compare results to IRL bus stops/routes/travel times
+    def performance(self, G):
         """
         Measures performance of proposed routes compared to existing routes.
         """
-        return None
+        total_dist = sum([G.adj[k1][k2]['weight']
+                          for k1 in G.adj for k2 in G.adj[k1]])
+        return total_dist
 
+    # TODO: Distance via Haversine
     def get_dist(self, p1, p2):
         return ((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)**0.5
 
-    def nx_mst(self, n_stops, points):
-        ltic = time.time()
-        stops = KMeans(n_clusters=n_stops).fit(points).cluster_centers_
-        print('K-means done in {} sec'.format(time.time() - ltic))
-        ltic = time.time()
-        # NetworkX already has an implementation for MST.
-        G = nx.Graph()
-        positions = {}
-        for i, p1 in enumerate(stops):
-            positions[i] = (p1[0], p1[1])
-            for j, p2 in enumerate(stops):
-                G.add_edge(i, j, weight=self.get_dist(p1, p2))
-        print('Graph done in {} sec'.format(time.time() - ltic))
-        ltic = time.time()
-        mst = nx.algorithms.minimum_spanning_tree(G)
-        print('MST done in {} sec'.format(time.time() - ltic))
-        total_dist = sum([mst.adj[k1][k2]['weight']
-                          for k1 in mst.adj for k2 in mst.adj[k1]])
-        return mst, positions, total_dist
-
-    def christofides(self):
+    # TODO: Change to take set of points as param and return TSP
+    def christofides(self, show_steps=False):
         """
         Algorithm:
         1) Create minimum spanning tree of graph
-        2) Find all nodes with odd degree (odd number of arcs)
+        2) Find all nodes with odd degree (odd number of edges)
         3) Create minimum weight perfect matching graph of nodes from 2)
         4) Combine graphs from 1) and 3) (all nodes should have even degree)
-        5) Skip repeated nodes???
+        5) Remove (skip) repeated nodes
+        6) Improve result with 2-opt
+
+        Returns NetworkX Graph object with ~TSP edges.
         """
-        return None
+        # TODO: Remove this part, convert to generic list of points?
+        stops = sk_cl.KMeans(n_clusters=self.n).fit(self.arr).cluster_centers_
+        pos = {i: (p[0], p[1]) for i, p in enumerate(stops)}
+        edges = [(i, j, self.get_dist(p1, p2)) for i, p1 in enumerate(stops)
+                 for j, p2 in enumerate(stops)]
+        G = nx.Graph()
+        G.add_weighted_edges_from(edges)
+
+        # Step 1)
+        mst = nx.algorithms.minimum_spanning_tree(G)
+        if show_steps:
+            self.draw(mst, pos, 'mst')
+
+        # Step 2)
+        odds = [n for n in range(mst.number_of_nodes())
+                if mst.degree(n) % 2 != 0]
+        if show_steps:
+            print('odds: {0}'.format(odds))
+
+        # Step 3)
+        adj = np.array([[self.get_dist(pos[n1], pos[n2])
+                         for n1 in odds] for n2 in odds])
+        # Prevent self-selection
+        np.fill_diagonal(adj, np.inf)
+        # Prevent re-selection of existing edges
+        for edge in mst.edges():
+            if edge[0] in odds and edge[1] in odds:
+                i = odds.index(edge[0])
+                j = odds.index(edge[1])
+                adj[i, j] = np.inf
+                adj[j, i] = np.inf
+        new_edges = []
+        selected = []
+        # Find minimum weight edges
+        # np.argmin(adj, axis=1) includes duplicates, which we want to avoid
+        for indx, row in enumerate(adj):
+            # If a node was selected already, skip it
+            if indx in selected:
+                continue
+            min_indx = np.argmin(adj, axis=1)[indx]
+            n1 = odds[indx]
+            n2 = odds[min_indx]
+            new_edges.append((n1, n2, adj[indx, min_indx]))
+            # Prevent double selection
+            # Overwrite columns with np.inf and add to selected list
+            adj[:, indx] = np.inf
+            adj[:, min_indx] = np.inf
+            selected.extend((indx, min_indx))
+        if show_steps:
+            print('new_edges: {0}'.format(new_edges))
+
+        # Step 4)
+        mm_mst = mst.copy()
+        mm_mst.add_weighted_edges_from(new_edges)
+        if show_steps:
+            self.draw(mm_mst, pos, 'min matching mst')
+
+        # Step 5)
+        # TODO: review this step
+        node = 0
+        nodelist = []
+        stack = [node]
+        while len(nodelist) < len(mm_mst.nodes()):
+            node = stack.pop(0)
+            if node not in nodelist:
+                nodelist.append(node)
+            for edge in mm_mst.edges(node):
+                if edge[1] not in stack and edge[1] not in nodelist:
+                    stack.insert(0, edge[1])
+        tsp_edges = [(nodelist[i], nodelist[i + 1],
+                      self.get_dist(pos[nodelist[i]], pos[nodelist[i + 1]]))
+                     for i in range(len(nodelist[:-2]))]
+
+        # Connect first and last nodes -> Is this correct?
+        tsp_edges.append((tsp_edges[-1][1], tsp_edges[0][0],
+                          self.get_dist(pos[tsp_edges[-1][1]],
+                                        pos[tsp_edges[0][0]])))
+
+        tsp = nx.Graph()
+        tsp.add_weighted_edges_from(tsp_edges)
+        if show_steps:
+            self.draw(tsp, pos, 'tsp')
+        # TODO: Step 6)
+        return tsp, pos
 
     def nearest_neighbor(self):
         """
@@ -174,6 +248,25 @@ class BetterBus:
         5) Select starting city (and route) with shortest route
         """
         return None
+
+    def draw(self, G, p, title):
+        """
+        Takes a NetworkX Graph object, a dictionary of node positions,
+        and a title.
+        """
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.tick_params(axis='both', which='both', bottom='off',
+                       top='off', labelbottom='off', right='off',
+                       left='off', labelleft='off')
+        ax.set_title(title, size=8)
+        # Draw population dots
+        ax.scatter(self.arr[:, 0], self.arr[:, 1], s=0.01, c='#5d8eec')
+        # Draw input route
+        nx.draw_networkx(G, p, node_color='#F95151', node_size=5,
+                         with_labels=True)
+        plt.savefig(title, dpi=300)
+        plt.show(block=False)
 
 
 if __name__ == '__main__':
@@ -199,84 +292,47 @@ if __name__ == '__main__':
     TSP routes >2-opt> TSP routes
 
     How to connect routes with each other? For transfers, long-trips, etc.
+    Tie each route back to its depot and add routes between depots.
+    Add more depots.
     """
-    tic = time.time()
-    BB = BetterBus()
+    n = 20
+    BB = BetterBus(n)
     # BB.gen_df()
-    # print('gen_df done in {} sec'.format(time.time() - tic))
-    BB.read_df()
-    print('read_df done in {} sec'.format(time.time() - tic))
-    toc = time.time()
-    BB.gen_arr()
-    print('gen_arr done in {} sec'.format(time.time() - toc))
-    toc = time.time()
-    n_depots = 2
-    n_buses = 20
-    n_stops = 200
-    n_stops_per_depot = n_stops // n_depots
-    n_buses_per_depot = n_buses // n_depots
-    n_stops_per_bus = n_stops_per_depot // n_buses_per_depot
-    fig = plt.figure()
-    ax = plt.subplot(111)
-    ax.set(adjustable='box', aspect=0.6)
-    ax.tick_params(axis='both', which='both', bottom='off',
-                   top='off', labelbottom='off', right='off',
-                   left='off', labelleft='off')
-    msg = '{0} n_depots, {1} n_buses_per_depot, {2} n_stops_per_bus'
-    ax.set_title(msg.format(n_depots, n_buses_per_depot, n_stops_per_bus),
-                 size=8)
-    # Draw population (blue)
-    ax.scatter(BB.arr[:, 0], BB.arr[:, 1], s=0.01, c='#5d8eec')
-    km_depots = KMeans(n_clusters=n_depots).fit(BB.arr)
-    for clust1 in range(n_depots):
-        # Draw depot centers (green)
-        ax.scatter(km_depots.cluster_centers_[:, 0],
-                   km_depots.cluster_centers_[:, 1], s=8, c='#00ff00')
-        depot_arr = BB.arr[np.where(km_depots.labels_ == clust1)]
-        km_routes = KMeans(n_clusters=n_buses_per_depot).fit(depot_arr)
-        for clust2 in range(n_buses_per_depot):
-            bus_arr = depot_arr[np.where(km_routes.labels_ == clust2)]
-            mst, positions, dist = BB.nx_mst(n_stops_per_bus, bus_arr)
-            # Draw stops (red) and routes (black)
-            nx.draw_networkx(mst, positions, node_color='#f95151',
-                             node_size=5, with_labels=False, ax=ax)
-    plt.savefig('map_d{0}b{1}s{2}.png'.format(n_depots,
-                                              n_buses_per_depot,
-                                              n_stops_per_bus), dpi=400)
-    """
+    # BB.read_df()
+    # BB.gen_arr()
+    # tsp, pos = BB.christofides(show_steps=True)
 
-    # Loop to compare different input values
-    n_depots = [1, 2, 3]
-    n_stops_per_depot = [25, 50]  # , 75, 100]
-    for depots in n_depots:
-        km = KMeans(n_clusters=depots).fit(BB.arr)
-        print('Depot cluster done in {} sec'.format(time.time() - toc))
-        toc = time.time()
-        fig, axes = plt.subplots(round(len(n_stops_per_depot) / 2), 2)
-        for cluster in range(depots):
-            # Assign each point to new array corresponding to clusters
-            new_arr = BB.arr[np.where(km.labels_ == cluster)]
-            for i, n in enumerate(n_stops_per_depot):
-                print('Beginning depot {0} route {1}'.format(depots, n))
-                mst, positions, dist = BB.nx_mst(n, new_arr)
-                ax = axes[i]
-                ax.set(adjustable='box', aspect=0.6)
-                ax.tick_params(axis='both', which='both', bottom='off',
-                               top='off', labelbottom='off', right='off',
-                               left='off', labelleft='off')
-                ax.set_title('{} stops per depot'.format(n), size=8)
-                if cluster == 0:
-                    # Population dots, blue (#5d8eec)
-                    ax.scatter(BB.arr[:, 0], BB.arr[:, 1], s=0.01, c='#5d8eec')
-                # Bus stops, red (#f95151), and routes, black
-                nx.draw_networkx(mst, positions, node_color='#f95151',
-                                 node_size=5, with_labels=False, ax=ax)
-                msg = 'Depot {0} route {1} done in {2} sec'
-                print(msg.format(depots, n, time.time() - toc))
-                toc = time.time()
-        plt.savefig('map_{}depots.png'.format(depots), dpi=300)
-        # plt.show()
-        print('Plotting depot {0} done in {1} sec'.format(depots,
-                                                          time.time() - toc))
-    print('Total time elapsed {} sec'.format(time.time() - tic))
-    """
+    # n_depots = 10
+    # n_buses = 40
+    # n_stops = 200
+    # n_stops_per_depot = n_stops // n_depots
+    # n_buses_per_depot = n_buses // n_depots
+    # n_stops_per_bus = n_stops // n_buses
+    # fig = plt.figure()
+    # ax = plt.subplot(111)
+    # ax.set(adjustable='box', aspect=0.6)
+    # ax.tick_params(axis='both', which='both', bottom='off',
+    #                top='off', labelbottom='off', right='off',
+    #                left='off', labelleft='off')
+    # msg = '{0} n_depots, {1} n_buses_per_depot, {2} n_stops_per_bus'
+    # ax.set_title(msg.format(n_depots, n_buses_per_depot, n_stops_per_bus),
+    #              size=8)
+    # # Draw population (blue)
+    # ax.scatter(BB.arr[:, 0], BB.arr[:, 1], s=0.01, c='#5d8eec')
+    # km_depots = sk_cl.KMeans(n_clusters=n_depots).fit(BB.arr)
+    # for clust1 in range(n_depots):
+    #     # Draw depot centers (green)
+    #     ax.scatter(km_depots.cluster_centers_[:, 0],
+    #                km_depots.cluster_centers_[:, 1], s=8, c='#00ff00')
+    #     depot_arr = BB.arr[np.where(km_depots.labels_ == clust1)]
+    #     km_routes = sk_cl.KMeans(n_clusters=n_buses_per_depot).fit(depot_arr)
+    #     for clust2 in range(n_buses_per_depot):
+    #         # Add depot to each route?
+    #         bus_arr = depot_arr[np.where(km_routes.labels_ == clust2)]
+    #         mst, positions, dist = BB.nx_mst(n_stops_per_bus, bus_arr)
+    #         # Draw stops (red) and routes (black)
+    #         nx.draw_networkx(mst, positions, node_color='#f95151',
+    #                          node_size=5, with_labels=False, ax=ax)
+    # plt.savefig('map_d{0}b{1}s{2}.png'.format(n_depots,
+    #                                           n_buses_per_depot,
+    #                                           n_stops_per_bus), dpi=400)
