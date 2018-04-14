@@ -6,6 +6,7 @@ import pandas as pd
 import sklearn.cluster as sk_cl
 import matplotlib.pyplot as plt
 import networkx as nx
+import time
 
 
 class BetterBus:
@@ -26,24 +27,28 @@ class BetterBus:
         https://wiki.openstreetmap.org/wiki/Map_Features#Building
         Bus stops Arlington County VA catalog.data.gov
         """
+        ts = time.time()
         rnd.seed(1)
         plt.style.use('bmh')
         self.sfile = 'tl_2010_51013_tabblock10/tl_2010_51013_tabblock10.shp'
         self.n = n
         self.gen_df()
-        print('gen_df() complete.')
         self.gen_arr()
-        print('gen_arr() complete.')
+        te = time.time()
+        print('__init__() complete in {0} sec'.format(te - ts))
 
     def calc_centroid(self, points_arr):
         """
         Define a function to calculate the centroid from a numpy array of
         points.
         """
+        ts = time.time()
         length = points_arr.shape[0]
         sum_x = np.sum(points_arr[:, 0])
         sum_y = np.sum(points_arr[:, 1])
         return sum_x / length, sum_y / length
+        te = time.time()
+        print('calc_centroid() complete in {0} sec'.format(te - ts))
 
     def gen_df(self):
         """
@@ -63,6 +68,7 @@ class BetterBus:
         Convert shapefile points to numpy array for processing in
         calc_centroid.
         """
+        ts = time.time()
         data = []
         with open('census_api_resp.json', 'r') as fid:
             lines = fid.readlines()
@@ -93,13 +99,18 @@ class BetterBus:
         with pd.HDFStore('store.h5') as store:
             store['df'] = self.df
         self.df.to_pickle('store.pkl')
+        te = time.time()
+        print('gen_df() complete in {0} sec'.format(te - ts))
 
     def read_df(self):
+        ts = time.time()
         try:
             with pd.HDFStore('store.h5') as store:
                 self.df = store['df']
         except Exception as e:
             print(e)
+        te = time.time()
+        print('read_df() complete in {0} sec'.format(te - ts))
 
     def gen_arr(self):
         """
@@ -109,6 +120,7 @@ class BetterBus:
         Each population point will be randomly distributed within the
         bounding box for that block.
         """
+        ts = time.time()
         data = []
         for indx, row in self.df.iterrows():
             for _ in range(int(row['pop'])):
@@ -116,9 +128,12 @@ class BetterBus:
                 lon = rnd.uniform(row.loc['bbox_lon1'], row.loc['bbox_lon2'])
                 data.append([lat, lon])
         self.arr = np.array(data)
+        te = time.time()
+        print('gen_arr() complete in {0} sec'.format(te - ts))
 
     # TODO: Move to draw() (if possible)
     def graph_shapefile(self):
+        ts = time.time()
         sf = shapefile.Reader(self.sfile)
         plt.figure()
         for shape in sf.shapeRecords():
@@ -126,14 +141,19 @@ class BetterBus:
             y = [i[1] for i in shape.shape.points[:]]
             plt.plot(x, y)
         plt.show()
+        te = time.time()
+        print('graph_shapefile() complete in {0} sec'.format(te - ts))
 
     # TODO: Compare results to IRL bus stops/routes/travel times
     def performance(self, G):
         """
         Measures performance of proposed routes compared to existing routes.
         """
+        ts = time.time()
         total_dist = sum([G.adj[k1][k2]['weight']
                           for k1 in G.adj for k2 in G.adj[k1]])
+        te = time.time()
+        print('performance() complete in {0} sec'.format(te - ts))
         return total_dist
 
     # TODO: Distance via Haversine
@@ -153,6 +173,7 @@ class BetterBus:
 
         Returns NetworkX Graph object with ~TSP edges.
         """
+        ts = time.time()
         # TODO: Remove this part, convert to generic list of points?
         stops = sk_cl.KMeans(n_clusters=self.n).fit(self.arr).cluster_centers_
         pos = {i: (p[0], p[1]) for i, p in enumerate(stops)}
@@ -236,6 +257,8 @@ class BetterBus:
         if show_steps:
             self.draw(tsp, pos, 'tsp')
         # TODO: Step 6)
+        te = time.time()
+        print('christofides() complete in {0} sec'.format(te - ts))
         return tsp, pos
 
     def nearest_neighbor(self):
@@ -247,6 +270,9 @@ class BetterBus:
         4) Repeat 1)-3) for a different random starting city
         5) Select starting city (and route) with shortest route
         """
+        ts = time.time()
+        te = time.time()
+        print('nearest_neighbor() complete in {0} sec'.format(te - ts))
         return None
 
     def draw(self, G, p, title):
@@ -254,6 +280,7 @@ class BetterBus:
         Takes a NetworkX Graph object, a dictionary of node positions,
         and a title.
         """
+        ts = time.time()
         fig = plt.figure()
         ax = fig.add_subplot(111)
         ax.tick_params(axis='both', which='both', bottom='off',
@@ -267,6 +294,8 @@ class BetterBus:
                          with_labels=True)
         plt.savefig(title, dpi=300)
         plt.show(block=False)
+        te = time.time()
+        print('draw() complete in {0} sec'.format(te - ts))
 
 
 if __name__ == '__main__':
