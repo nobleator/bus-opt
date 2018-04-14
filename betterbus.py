@@ -139,8 +139,8 @@ class BetterBus:
         for shape in sf.shapeRecords():
             x = [i[0] for i in shape.shape.points[:]]
             y = [i[1] for i in shape.shape.points[:]]
-            plt.plot(x, y)
-        plt.show()
+            plt.plot(x, y, linewidth=0.1)
+        plt.show(block=False)
         te = time.time()
         print('graph_shapefile() complete in {0} sec'.format(te - ts))
 
@@ -176,7 +176,7 @@ class BetterBus:
         ts = time.time()
         # TODO: Remove this part, convert to generic list of points?
         stops = sk_cl.KMeans(n_clusters=self.n).fit(self.arr).cluster_centers_
-        pos = {i: (p[0], p[1]) for i, p in enumerate(stops)}
+        pos = {i: (p[1], p[0]) for i, p in enumerate(stops)}
         edges = [(i, j, self.get_dist(p1, p2)) for i, p1 in enumerate(stops)
                  for j, p2 in enumerate(stops)]
         G = nx.Graph()
@@ -287,11 +287,17 @@ class BetterBus:
                        top='off', labelbottom='off', right='off',
                        left='off', labelleft='off')
         ax.set_title(title, size=8)
+        # Draw shapefile outlines
+        sf = shapefile.Reader(self.sfile)
+        for shape in sf.shapeRecords():
+            x = [i[0] for i in shape.shape.points[:]]
+            y = [i[1] for i in shape.shape.points[:]]
+            plt.plot(x, y, linewidth=0.1)
         # Draw population dots
-        ax.scatter(self.arr[:, 0], self.arr[:, 1], s=0.01, c='#5d8eec')
+        ax.scatter(self.arr[:, 1], self.arr[:, 0], s=0.01, c='#5d8eec')
         # Draw input route
         nx.draw_networkx(G, p, node_color='#F95151', node_size=5,
-                         with_labels=True)
+                         with_labels=False)
         plt.savefig(title, dpi=300)
         plt.show(block=False)
         te = time.time()
