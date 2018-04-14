@@ -32,7 +32,10 @@ class BetterBus:
         plt.style.use('bmh')
         self.sfile = 'tl_2010_51013_tabblock10/tl_2010_51013_tabblock10.shp'
         self.n = n
-        self.gen_df()
+        try:
+            self.read_df()
+        except FileNotFoundError:
+            self.gen_df()
         self.gen_arr()
         te = time.time()
         print('__init__() complete in {0} sec'.format(te - ts))
