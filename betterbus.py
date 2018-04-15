@@ -151,7 +151,6 @@ class BetterBus:
     def get_dist(self, p1, p2):
         return ((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)**0.5
 
-    # TODO: Review step 5) (visited should be a dict of node: edges)
     # TODO: Step 6)
     def christofides(self, points, show_steps=False):
         """
