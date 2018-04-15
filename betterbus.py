@@ -214,24 +214,23 @@ class BetterBus:
         mm_mst.add_weighted_edges_from(new_edges)
 
         # Step 5)
-        node = 0
-        nodelist = []
-        stack = [node]
+        p_node = 0
+        n_node = 0
+        nodelist = [n_node]
+        edgelist = []
+        edgestack = []
         while len(nodelist) < len(mm_mst.nodes()):
-            node = stack.pop(0)
-            if node not in nodelist:
-                nodelist.append(node)
-            for edge in mm_mst.edges(node):
-                if edge[1] not in stack and edge[1] not in nodelist:
-                    stack.insert(0, edge[1])
-        tsp_edges = [(nodelist[i], nodelist[i + 1],
-                      self.get_dist(pos[nodelist[i]], pos[nodelist[i + 1]]))
-                     for i in range(len(nodelist[:-2]))]
-
+            for edge in mm_mst.edges(n_node):
+                edgestack.insert(0, edge)
+            while n_node in nodelist:
+                n_node = edgestack.pop(0)[1]
+            nodelist.append(n_node)
+            edgelist.append((p_node, n_node))
+            p_node = n_node
         # Connect first and last nodes -> Is this correct?
-        tsp_edges.append((tsp_edges[-1][1], tsp_edges[0][0],
-                          self.get_dist(pos[tsp_edges[-1][1]],
-                                        pos[tsp_edges[0][0]])))
+        edgelist.append((nodelist[-1], nodelist[0]))
+        tsp_edges = [(e[0], e[1], self.get_dist(pos[e[0]], pos[e[1]]))
+                     for e in edgelist]
 
         tsp = nx.Graph()
         tsp.add_weighted_edges_from(tsp_edges)
@@ -262,7 +261,7 @@ class BetterBus:
         return None
 
     # TODO: Modify to allow list of graphs (draw as subplots)
-    def draw(self, G, p, title):
+    def draw(self, graph, pos, title):
         """
         Takes a NetworkX Graph object, a dictionary of node positions,
         and a title.
@@ -283,10 +282,10 @@ class BetterBus:
         # Draw population dots
         ax.scatter(self.arr[:, 1], self.arr[:, 0], s=0.01, c='#5d8eec')
         # Draw input route
-        nx.draw_networkx(G, p, node_color='#F95151', node_size=5,
-                         with_labels=False)
+        nx.draw_networkx(graph, pos, node_color='#F95151', node_size=5,
+                         with_labels=True)
         plt.savefig(title, dpi=300)
-        plt.show(block=False)
+        # plt.show(block=False)
         te = time.time()
         print('draw() complete in {0} sec'.format(te - ts))
 
@@ -317,7 +316,7 @@ if __name__ == '__main__':
     Tie each route back to its depot and add routes between depots.
     Add more depots.
     """
-    n = 50
+    n = 25
     BB = BetterBus(n)
     stops = sk_cl.KMeans(n_clusters=BB.n).fit(BB.arr).cluster_centers_
     tsp, pos = BB.christofides(stops, show_steps=True)
