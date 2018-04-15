@@ -11,6 +11,7 @@ import time
 
 class BetterBus:
     # TODO: Random state not working?
+    # TODO: Add read_arr to try/except logic
     def __init__(self, n):
         """
         Set random_state to ensure repeatable outcome.
@@ -150,6 +151,8 @@ class BetterBus:
     def get_dist(self, p1, p2):
         return ((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)**0.5
 
+    # TODO: Review step 5) (visited should be a dict of node: edges)
+    # TODO: Step 6)
     def christofides(self, points, show_steps=False):
         """
         Algorithm:
@@ -171,14 +174,10 @@ class BetterBus:
 
         # Step 1)
         mst = nx.algorithms.minimum_spanning_tree(G)
-        if show_steps:
-            self.draw(mst, pos, 'mst')
 
         # Step 2)
         odds = [n for n in range(mst.number_of_nodes())
                 if mst.degree(n) % 2 != 0]
-        if show_steps:
-            print('odds: {0}'.format(odds))
 
         # Step 3)
         adj = np.array([[self.get_dist(pos[n1], pos[n2])
@@ -209,17 +208,12 @@ class BetterBus:
             adj[:, indx] = np.inf
             adj[:, min_indx] = np.inf
             selected.extend((indx, min_indx))
-        if show_steps:
-            print('new_edges: {0}'.format(new_edges))
 
         # Step 4)
         mm_mst = mst.copy()
         mm_mst.add_weighted_edges_from(new_edges)
-        if show_steps:
-            self.draw(mm_mst, pos, 'min matching mst')
 
         # Step 5)
-        # TODO: review this step
         node = 0
         nodelist = []
         stack = [node]
@@ -241,9 +235,14 @@ class BetterBus:
 
         tsp = nx.Graph()
         tsp.add_weighted_edges_from(tsp_edges)
+        # Step 6)
+
         if show_steps:
+            self.draw(mst, pos, 'mst')
+            print('odds: {0}'.format(odds))
+            print('new_edges: {0}'.format(new_edges))
+            self.draw(mm_mst, pos, 'min matching mst')
             self.draw(tsp, pos, 'tsp')
-        # TODO: Step 6)
         te = time.time()
         print('christofides() complete in {0} sec'.format(te - ts))
         return tsp, pos
@@ -262,6 +261,7 @@ class BetterBus:
         print('nearest_neighbor() complete in {0} sec'.format(te - ts))
         return None
 
+    # TODO: Modify to allow list of graphs (draw as subplots)
     def draw(self, G, p, title):
         """
         Takes a NetworkX Graph object, a dictionary of node positions,
