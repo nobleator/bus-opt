@@ -34,10 +34,12 @@ class BetterBus:
         self.sfile = 'tl_2010_51013_tabblock10/tl_2010_51013_tabblock10.shp'
         self.n = n
         try:
-            self.read_df()
-        except FileNotFoundError:
+            self.read_arr()
+        # except FileNotFoundError:
+        except Exception as e:
+            print(e)
             self.gen_df()
-        self.gen_arr()
+            self.gen_arr()
         te = time.time()
         print('__init__() complete in {0} sec'.format(te - ts))
 
@@ -132,8 +134,15 @@ class BetterBus:
                 lon = rnd.uniform(row.loc['bbox_lon1'], row.loc['bbox_lon2'])
                 data.append([lat, lon])
         self.arr = np.array(data)
+        np.save('arr_file', self.arr)
         te = time.time()
         print('gen_arr() complete in {0} sec'.format(te - ts))
+
+    def read_arr(self):
+        ts = time.time()
+        self.arr = np.load('arr_file.npy')
+        te = time.time()
+        print('read_arr() complete in {0} sec'.format(te - ts))
 
     # TODO: Compare results to IRL bus stops/routes/travel times
     def performance(self, G):
@@ -259,7 +268,7 @@ class BetterBus:
         print('nearest_neighbor() complete in {0} sec'.format(te - ts))
         return None
 
-    # TODO: Modify to allow list of graphs (draw as subplots)
+    # TODO: Modify to allow list of graphs (draw as subplots?)
     def draw(self, graph, pos, title):
         """
         Takes a NetworkX Graph object, a dictionary of node positions,
