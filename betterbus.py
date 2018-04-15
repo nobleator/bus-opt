@@ -10,7 +10,7 @@ import time
 
 
 class BetterBus:
-    # TODO: Use try/except to generate vs read DataFrame
+    # TODO: Random state not working?
     def __init__(self, n):
         """
         Set random_state to ensure repeatable outcome.
@@ -150,8 +150,7 @@ class BetterBus:
     def get_dist(self, p1, p2):
         return ((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)**0.5
 
-    # TODO: Change to take set of points as param and return TSP
-    def christofides(self, show_steps=False):
+    def christofides(self, points, show_steps=False):
         """
         Algorithm:
         1) Create minimum spanning tree of graph
@@ -164,11 +163,9 @@ class BetterBus:
         Returns NetworkX Graph object with ~TSP edges.
         """
         ts = time.time()
-        # TODO: Remove this part, convert to generic list of points?
-        stops = sk_cl.KMeans(n_clusters=self.n).fit(self.arr).cluster_centers_
-        pos = {i: (p[1], p[0]) for i, p in enumerate(stops)}
-        edges = [(i, j, self.get_dist(p1, p2)) for i, p1 in enumerate(stops)
-                 for j, p2 in enumerate(stops)]
+        pos = {i: (p[1], p[0]) for i, p in enumerate(points)}
+        edges = [(i, j, self.get_dist(p1, p2)) for i, p1 in enumerate(points)
+                 for j, p2 in enumerate(points)]
         G = nx.Graph()
         G.add_weighted_edges_from(edges)
 
@@ -320,12 +317,10 @@ if __name__ == '__main__':
     Tie each route back to its depot and add routes between depots.
     Add more depots.
     """
-    n = 20
+    n = 50
     BB = BetterBus(n)
-    # BB.gen_df()
-    # BB.read_df()
-    # BB.gen_arr()
-    # tsp, pos = BB.christofides(show_steps=True)
+    stops = sk_cl.KMeans(n_clusters=BB.n).fit(BB.arr).cluster_centers_
+    tsp, pos = BB.christofides(stops, show_steps=True)
 
     # n_depots = 10
     # n_buses = 40
