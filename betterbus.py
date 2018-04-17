@@ -11,7 +11,6 @@ import time
 
 class BetterBus:
     # TODO: Random state not working?
-    # TODO: Add read_arr to try/except logic
     def __init__(self, n):
         """
         Set random_state to ensure repeatable outcome.
@@ -35,7 +34,6 @@ class BetterBus:
         self.n = n
         try:
             self.read_arr()
-        # except FileNotFoundError:
         except Exception as e:
             print(e)
             self.gen_df()
@@ -160,7 +158,18 @@ class BetterBus:
     def get_dist(self, p1, p2):
         return ((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)**0.5
 
+    def swap(self, route, i, j):
+        new_route = route[:i]
+        new_route.append((route[i][0], route[j][0]))
+        for indx in range(j - 1, i, -1):
+            edge = route[indx]
+            new_route.append((edge[1], edge[0]))
+        new_route.append((route[i][1], route[j][1]))
+        new_route += route[j + 1:]
+        return new_route
+
     # TODO: Step 6)
+    # TODO: 2-opt improvement
     def christofides(self, points, show_steps=False):
         """
         Algorithm:
@@ -235,14 +244,36 @@ class BetterBus:
             nodelist.append(n_node)
             edgelist.append((p_node, n_node))
             p_node = n_node
-        # Connect first and last nodes -> Is this correct?
-        edgelist.append((nodelist[-1], nodelist[0]))
         tsp_edges = [(e[0], e[1], self.get_dist(pos[e[0]], pos[e[1]]))
                      for e in edgelist]
-
         tsp = nx.Graph()
         tsp.add_weighted_edges_from(tsp_edges)
+
         # Step 6)
+        route = list(tsp.edges())
+        dist = sum([self.get_dist(pos[e[0]], pos[e[1]]) for e in route])
+        i1 = 0
+        while i1 < len(route) - 2:
+            i2 = i1 + 1
+            while i2 < len(route):
+                new_route = self.swap(route, i1, i2)
+                new_dist = sum([self.get_dist(pos[e[0]], pos[e[1]])
+                                for e in new_route])
+                if new_dist < dist:
+                    route = new_route
+                    dist = new_dist
+                    i1 = 0
+                    break
+                i2 += 1
+            i1 += 1
+        improved_edges = [(e[0], e[1], self.get_dist(pos[e[0]], pos[e[1]]))
+                          for e in route]
+        # Connect first and last nodes -> Is this correct?
+        # improved_edges.append((improved_edges[-1][1], improved_edges[0][0],
+        #                        self.get_dist(pos[improved_edges[-1][1]],
+        #                                      pos[improved_edges[0][0]])))
+        improved_tsp = nx.Graph()
+        improved_tsp.add_weighted_edges_from(improved_edges)
 
         if show_steps:
             self.draw(mst, pos, 'mst')
@@ -250,9 +281,10 @@ class BetterBus:
             print('new_edges: {0}'.format(new_edges))
             self.draw(mm_mst, pos, 'min matching mst')
             self.draw(tsp, pos, 'tsp')
+            self.draw(improved_tsp, pos, 'improved tsp')
         te = time.time()
         print('christofides() complete in {0} sec'.format(te - ts))
-        return tsp, pos
+        return improved_tsp, pos
 
     def nearest_neighbor(self):
         """
@@ -347,6 +379,7 @@ if __name__ == '__main__':
     # # Draw population (blue)
     # ax.scatter(BB.arr[:, 0], BB.arr[:, 1], s=0.01, c='#5d8eec')
     # km_depots = sk_cl.KMeans(n_clusters=n_depots).fit(BB.arr)
+    # depot_tsp, depot_pos = BB.christofides(km_depots)
     # for clust1 in range(n_depots):
     #     # Draw depot centers (green)
     #     ax.scatter(km_depots.cluster_centers_[:, 0],
@@ -356,9 +389,10 @@ if __name__ == '__main__':
     #     for clust2 in range(n_buses_per_depot):
     #         # Add depot to each route?
     #         bus_arr = depot_arr[np.where(km_routes.labels_ == clust2)]
-    #         mst, positions, dist = BB.nx_mst(n_stops_per_bus, bus_arr)
+    #         # mst, positions, dist = BB.nx_mst(n_stops_per_bus, bus_arr)
+    #         tsp, pos = BB.christofides(bus_arr)
     #         # Draw stops (red) and routes (black)
-    #         nx.draw_networkx(mst, positions, node_color='#f95151',
+    #         nx.draw_networkx(tsp, pos, node_color='#f95151',
     #                          node_size=5, with_labels=False, ax=ax)
     # plt.savefig('map_d{0}b{1}s{2}.png'.format(n_depots,
     #                                           n_buses_per_depot,
