@@ -7,6 +7,7 @@ import sklearn.cluster as sk_cl
 import matplotlib.pyplot as plt
 import networkx as nx
 import time
+import math
 
 
 class BetterBus:
@@ -156,7 +157,18 @@ class BetterBus:
 
     # TODO: Distance via Haversine
     def get_dist(self, p1, p2):
-        return ((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)**0.5
+        """
+        Returns Haversine distance (in km) between two lat/lon tuples.
+
+        https://stackoverflow.com/questions/27928/calculate-distance-between-two-latitude-longitude-points-haversine-formula
+        """
+        r = 6384
+        # Pi/180
+        p = 0.017453292519943295
+        a = 0.5 - math.cos((p2[0] - p1[0]) * p) / 2 + math.cos(p1[0] * p) * \
+            math.cos(p2[0] * p) * (1 - math.cos((p2[1] - p1[1]) * p)) / 2
+        return 2 * r * math.asin(math.sqrt(a))
+        # return ((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)**0.5
 
     def swap(self, route, i, j):
         new_route = route[:i]
@@ -168,8 +180,7 @@ class BetterBus:
         new_route += route[j + 1:]
         return new_route
 
-    # TODO: Step 6)
-    # TODO: 2-opt improvement
+    # TODO: Connect first and last nodes
     def christofides(self, points, show_steps=False):
         """
         Algorithm:
