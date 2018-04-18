@@ -12,7 +12,7 @@ import math
 
 class BetterBus:
     # TODO: Random state not working?
-    def __init__(self, n):
+    def __init__(self):
         """
         Set random_state to ensure repeatable outcome.
 
@@ -32,7 +32,6 @@ class BetterBus:
         rnd.seed(1)
         plt.style.use('ggplot')
         self.sfile = 'tl_2010_51013_tabblock10/tl_2010_51013_tabblock10.shp'
-        self.n = n
         try:
             self.read_arr()
         except Exception as e:
@@ -168,7 +167,19 @@ class BetterBus:
             math.cos(p2[0] * p) * (1 - math.cos((p2[1] - p1[1]) * p)) / 2
         return 2 * r * math.asin(math.sqrt(a))
 
-    # TODO: Wrap-around fails here
+    def valid_route(self, route):
+        """
+        Returns False if the route has sub-tours or same-node edges.
+        """
+        edges = []
+        for edge in route:
+            if edge[0] == edge[1]:
+                return False
+            if len(edges) > 0 and edge[0] != edges[-1][1]:
+                return False
+            edges.append(edge)
+        return True
+
     def swap(self, route, i, j):
         new_route = route[:i]
         new_route.append((route[i][0], route[j][0]))
@@ -180,7 +191,6 @@ class BetterBus:
         return new_route
 
     def two_opt(self, graph, pos):
-        ts = time.time()
         route = list(graph.edges())
         dist = sum([self.get_dist(pos[e[0]], pos[e[1]]) for e in route])
         i1 = 0
@@ -190,7 +200,7 @@ class BetterBus:
                 new_route = self.swap(route, i1, i2)
                 new_dist = sum([self.get_dist(pos[e[0]], pos[e[1]])
                                 for e in new_route])
-                if new_dist < dist:
+                if new_dist < dist and self.valid_route(new_route):
                     route = new_route
                     dist = new_dist
                     i1 = 0
@@ -199,19 +209,11 @@ class BetterBus:
             i1 += 1
         edges = [(e[0], e[1], self.get_dist(pos[e[0]], pos[e[1]]))
                  for e in route]
-        # Connect first and last nodes -> Is this correct?
-        # edges.append((edges[-1][1], edges[0][0],
-        #               self.get_dist(pos[edges[-1][1]], pos[edges[0][0]])))
-        # print(list(graph.edges()))
-        # print(edges)
         tsp = nx.Graph()
         tsp.add_weighted_edges_from(edges)
-        te = time.time()
-        print('two_opt() complete in {0} sec'.format(te - ts))
         return tsp
 
-    # TODO: Connect first and last nodes
-    def christofides(self, points, show_steps=False):
+    def christofides(self, points, show_steps=False, show_final=False):
         """
         Algorithm:
         1) Create minimum spanning tree of graph
@@ -287,25 +289,30 @@ class BetterBus:
             p_node = n_node
         tsp_edges = [(e[0], e[1], self.get_dist(pos[e[0]], pos[e[1]]))
                      for e in edgelist]
-        # wrap = (nodelist[-1], nodelist[0], self.get_dist(pos[nodelist[-1]],
-        #                                                  pos[nodelist[0]]))
-        # tsp_edges.append(wrap)
-        tsp = nx.Graph()
+        wrap = (nodelist[-1], nodelist[0], self.get_dist(pos[nodelist[-1]],
+                                                         pos[nodelist[0]]))
+        tsp_edges.append(wrap)
+        tsp = nx.DiGraph()
         tsp.add_weighted_edges_from(tsp_edges)
 
         # Step 6)
         old = tsp.copy()
+        two_opt_ctr = 0
         while True:
             new = self.two_opt(old, pos)
             if list(new.edges()) == list(old.edges()):
                 break
             old = new.copy()
+            two_opt_ctr += 1
+        print('two_opt() called {0} times'.format(two_opt_ctr))
         improved_tsp = new.copy()
 
         if show_steps:
             self.draw(mst, pos, 'mst')
             self.draw(mm_mst, pos, 'min matching mst')
             self.draw(tsp, pos, 'tsp')
+            self.draw(improved_tsp, pos, 'improved tsp')
+        elif show_final:
             self.draw(improved_tsp, pos, 'improved tsp')
         te = time.time()
         print('christofides() complete in {0} sec'.format(te - ts))
@@ -384,8 +391,8 @@ if __name__ == '__main__':
     """
     tic = time.time()
     n = 25
-    BB = BetterBus(n)
-    stops = sk_cl.MiniBatchKMeans(n_clusters=BB.n).fit(BB.arr).cluster_centers_
+    BB = BetterBus()
+    stops = sk_cl.MiniBatchKMeans(n_clusters=n).fit(BB.arr).cluster_centers_
     tsp, pos = BB.christofides(stops, show_steps=True)
     toc = time.time()
     print('Run complete in {0} sec'.format(toc - tic))
