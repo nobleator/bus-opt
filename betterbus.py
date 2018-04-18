@@ -30,7 +30,7 @@ class BetterBus:
         """
         ts = time.time()
         rnd.seed(1)
-        plt.style.use('bmh')
+        plt.style.use('ggplot')
         self.sfile = 'tl_2010_51013_tabblock10/tl_2010_51013_tabblock10.shp'
         self.n = n
         try:
@@ -155,7 +155,6 @@ class BetterBus:
         print('performance() complete in {0} sec'.format(te - ts))
         return total_dist
 
-    # TODO: Distance via Haversine
     def get_dist(self, p1, p2):
         """
         Returns Haversine distance (in km) between two lat/lon tuples.
@@ -168,8 +167,8 @@ class BetterBus:
         a = 0.5 - math.cos((p2[0] - p1[0]) * p) / 2 + math.cos(p1[0] * p) * \
             math.cos(p2[0] * p) * (1 - math.cos((p2[1] - p1[1]) * p)) / 2
         return 2 * r * math.asin(math.sqrt(a))
-        # return ((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)**0.5
 
+    # TODO: Wrap-around fails here
     def swap(self, route, i, j):
         new_route = route[:i]
         new_route.append((route[i][0], route[j][0]))
@@ -179,6 +178,37 @@ class BetterBus:
         new_route.append((route[i][1], route[j][1]))
         new_route += route[j + 1:]
         return new_route
+
+    def two_opt(self, graph, pos):
+        ts = time.time()
+        route = list(graph.edges())
+        dist = sum([self.get_dist(pos[e[0]], pos[e[1]]) for e in route])
+        i1 = 0
+        while i1 < len(route) - 2:
+            i2 = i1 + 1
+            while i2 < len(route):
+                new_route = self.swap(route, i1, i2)
+                new_dist = sum([self.get_dist(pos[e[0]], pos[e[1]])
+                                for e in new_route])
+                if new_dist < dist:
+                    route = new_route
+                    dist = new_dist
+                    i1 = 0
+                    break
+                i2 += 1
+            i1 += 1
+        edges = [(e[0], e[1], self.get_dist(pos[e[0]], pos[e[1]]))
+                 for e in route]
+        # Connect first and last nodes -> Is this correct?
+        # edges.append((edges[-1][1], edges[0][0],
+        #               self.get_dist(pos[edges[-1][1]], pos[edges[0][0]])))
+        # print(list(graph.edges()))
+        # print(edges)
+        tsp = nx.Graph()
+        tsp.add_weighted_edges_from(edges)
+        te = time.time()
+        print('two_opt() complete in {0} sec'.format(te - ts))
+        return tsp
 
     # TODO: Connect first and last nodes
     def christofides(self, points, show_steps=False):
@@ -257,39 +287,23 @@ class BetterBus:
             p_node = n_node
         tsp_edges = [(e[0], e[1], self.get_dist(pos[e[0]], pos[e[1]]))
                      for e in edgelist]
+        # wrap = (nodelist[-1], nodelist[0], self.get_dist(pos[nodelist[-1]],
+        #                                                  pos[nodelist[0]]))
+        # tsp_edges.append(wrap)
         tsp = nx.Graph()
         tsp.add_weighted_edges_from(tsp_edges)
 
         # Step 6)
-        route = list(tsp.edges())
-        dist = sum([self.get_dist(pos[e[0]], pos[e[1]]) for e in route])
-        i1 = 0
-        while i1 < len(route) - 2:
-            i2 = i1 + 1
-            while i2 < len(route):
-                new_route = self.swap(route, i1, i2)
-                new_dist = sum([self.get_dist(pos[e[0]], pos[e[1]])
-                                for e in new_route])
-                if new_dist < dist:
-                    route = new_route
-                    dist = new_dist
-                    i1 = 0
-                    break
-                i2 += 1
-            i1 += 1
-        improved_edges = [(e[0], e[1], self.get_dist(pos[e[0]], pos[e[1]]))
-                          for e in route]
-        # Connect first and last nodes -> Is this correct?
-        # improved_edges.append((improved_edges[-1][1], improved_edges[0][0],
-        #                        self.get_dist(pos[improved_edges[-1][1]],
-        #                                      pos[improved_edges[0][0]])))
-        improved_tsp = nx.Graph()
-        improved_tsp.add_weighted_edges_from(improved_edges)
+        old = tsp.copy()
+        while True:
+            new = self.two_opt(old, pos)
+            if list(new.edges()) == list(old.edges()):
+                break
+            old = new.copy()
+        improved_tsp = new.copy()
 
         if show_steps:
             self.draw(mst, pos, 'mst')
-            print('odds: {0}'.format(odds))
-            print('new_edges: {0}'.format(new_edges))
             self.draw(mm_mst, pos, 'min matching mst')
             self.draw(tsp, pos, 'tsp')
             self.draw(improved_tsp, pos, 'improved tsp')
@@ -323,6 +337,7 @@ class BetterBus:
         ax.tick_params(axis='both', which='both', bottom='off',
                        top='off', labelbottom='off', right='off',
                        left='off', labelleft='off')
+        ax.set(adjustable='box', aspect=0.75)
         ax.set_title(title, size=8)
         # Draw shapefile outlines
         sf = shapefile.Reader(self.sfile)
@@ -367,10 +382,13 @@ if __name__ == '__main__':
     Tie each route back to its depot and add routes between depots.
     Add more depots.
     """
+    tic = time.time()
     n = 25
     BB = BetterBus(n)
-    stops = sk_cl.KMeans(n_clusters=BB.n).fit(BB.arr).cluster_centers_
+    stops = sk_cl.MiniBatchKMeans(n_clusters=BB.n).fit(BB.arr).cluster_centers_
     tsp, pos = BB.christofides(stops, show_steps=True)
+    toc = time.time()
+    print('Run complete in {0} sec'.format(toc - tic))
 
     # n_depots = 10
     # n_buses = 40
