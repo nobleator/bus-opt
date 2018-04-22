@@ -143,13 +143,14 @@ class BetterBus:
         print('read_arr() complete in {0} sec'.format(te - ts))
 
     # TODO: Compare results to IRL bus stops/routes/travel times
-    def performance(self, G):
+    def performance(self, graph):
         """
         Measures performance of proposed routes compared to existing routes.
+        Build timetable from route(s) and simulate travel.
         """
         ts = time.time()
-        total_dist = sum([G.adj[k1][k2]['weight']
-                          for k1 in G.adj for k2 in G.adj[k1]])
+        total_dist = sum([graph.adj[k1][k2]['weight']
+                          for k1 in graph.adj for k2 in graph.adj[k1]])
         te = time.time()
         print('performance() complete in {0} sec'.format(te - ts))
         return total_dist
@@ -339,7 +340,7 @@ class BetterBus:
         and a title.
         """
         ts = time.time()
-        fig = plt.figure()
+        fig = plt.figure(figsize=(12, 8), dpi=300)
         ax = fig.add_subplot(111)
         ax.tick_params(axis='both', which='both', bottom='off',
                        top='off', labelbottom='off', right='off',
@@ -356,9 +357,9 @@ class BetterBus:
         ax.scatter(self.arr[:, 1], self.arr[:, 0], s=0.01, c='#5d8eec')
         # Draw input route
         nx.draw_networkx(graph, pos, node_color='#F95151', node_size=5,
-                         with_labels=True)
-        plt.savefig(title, dpi=300)
-        # plt.show(block=False)
+                         with_labels=False)
+        # plt.savefig(title, dpi=300)
+        plt.show(block=False)
         te = time.time()
         print('draw() complete in {0} sec'.format(te - ts))
 
