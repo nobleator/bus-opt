@@ -142,18 +142,131 @@ class BetterBus:
         te = time.time()
         print('read_arr() complete in {0} sec'.format(te - ts))
 
-    # TODO: Compare results to IRL bus stops/routes/travel times
-    def performance(self, graph):
+    def gen_timetable(self, graph, pos, n_buses):
+        """
+        Create timetable like this:
+        time  |  bus  | node |  route
+        --------------------------------
+        00:00 | bus01 |  A   | A-B-C-D-E
+        00:00 | bus03 |  A   | E-D-C-B-A
+        00:10 | bus01 |  B   | A-B-C-D-E
+        00:15 | bus03 |  E   | E-D-C-B-A
+        """
+        n_buses = 10
+        # Split buses into half, one half in each direction.
+        half_buses = n_buses // 2
+        # TODO: Loop for an entire day, not just one lap per bus
+        # TODO: Find starting stop for each bus.
+        # Speed in km/hr
+        # 40 km/hr ~= 25 mph
+        bus_speed = 40
+        trip_length = sum([e[2]['weight']
+                           for e in list(graph.edges(data=True))])
+        trip_time = trip_length * bus_speed
+        start_time_increments = round(trip_time // half_buses)
+        route1 = [0]
+        while len(route1) < len(graph.nodes()):
+            for edge in list(graph.edges(route1[-1])):
+                if edge[1] not in route1:
+                    route1.append(edge[1])
+        route2 = [node for node in reversed(route1)]
+        # Shift so they both start at the same location
+        route2.insert(0, route2.pop())
+        data = []
+        start_time = 0
+        for bus in range(half_buses + 1):
+            ctr = 0
+            arrival_time = start_time
+            while ctr < len(route1) - 1:
+                arrival_node = route1[ctr + 1]
+                dist = bb.get_dist(pos[route1[ctr]], pos[arrival_node])
+                arrival_time += round(dist * bus_speed)
+                data.append({'bus': bus,
+                             'time': arrival_time,
+                             'route': route1,
+                             'node': arrival_node})
+                ctr += 1
+            start_time += start_time_increments
+        start_time = 0
+        for bus in range(half_buses + 1, n_buses + 1):
+            ctr = 0
+            arrival_time = start_time
+            while ctr < len(route2) - 1:
+                arrival_node = route2[ctr + 1]
+                dist = bb.get_dist(pos[route2[ctr]], pos[arrival_node])
+                arrival_time += round(dist * bus_speed)
+                data.append({'bus': bus,
+                             'time': arrival_time,
+                             'route': route2,
+                             'node': arrival_node})
+                ctr += 1
+            start_time += start_time_increments
+        self.timetable = pd.DataFrame(data)
+
+    def performance(self, graph, pos, n_buses, reps=1):
         """
         Measures performance of proposed routes compared to existing routes.
         Build timetable from route(s) and simulate travel.
         """
         ts = time.time()
-        total_dist = sum([graph.adj[k1][k2]['weight']
-                          for k1 in graph.adj for k2 in graph.adj[k1]])
+        self.gen_timetable(graph, pos, n_buses)
+        bus_speed = 40
+        scores = []
+        for _ in range(reps):
+            start, end = self.arr[np.random.choice(self.arr.shape[0], 2,
+                                                   replace=False), :]
+            # Problem with lat/lon ordering
+            start = (start[1], start[0])
+            end = (end[1], end[0])
+            nodelist = list(graph.nodes())
+            start_node = min([(n, self.get_dist(start, pos[n]))
+                              for n in nodelist],
+                             key=lambda x: x[1])[0]
+            end_node = min([(n, self.get_dist(end, pos[n]))
+                            for n in nodelist],
+                           key=lambda x: x[1])[0]
+            print(start, start_node, end, end_node)
+            # TODO: Generate t (start time) randomly
+            t = 0
+            walk_time = 0
+            min_time = sum([graph.adj[k1][k2]['weight']
+                            for k1 in graph.adj for k2 in graph.adj[k1]])
+            for row in self.timetable.loc[(self.timetable['node'] == start_node) &
+                                          (self.timetable['time'] > t)].iterrows():
+                dist = self.route_dist(start_node, end_node,
+                                       row[1]['route'], pos)
+                trip_time = dist / bus_speed
+                if trip_time < min_time:
+                    # selected_bus = row[1]['bus']
+                    # min_dist = dist
+                    min_time = trip_time
+                    wait_time = row[1]['time'] - t
+            score = trip_time + wait_time * 1.5 + walk_time * 2
+            scores.append(score)
+        scores = np.array(scores)
         te = time.time()
         print('performance() complete in {0} sec'.format(te - ts))
-        return total_dist
+        return np.mean(scores), np.std(scores)
+
+    def route_dist(self, n1, n2, route, positions):
+        """
+        Calculates distance between 2 nodes along a given route.
+        """
+        dist = 0
+        done = False
+        curr_indx = route.index(n1)
+        while not done:
+            next_indx = curr_indx + 1
+            if next_indx >= len(route):
+                next_indx = 0
+            dist += self.get_dist(positions[route[curr_indx]],
+                                  positions[route[curr_indx]])
+            if next_indx == route.index(n2):
+                done = True
+            curr_indx += 1
+            if curr_indx >= len(route):
+                curr_indx = 0
+        return dist
 
     def get_dist(self, p1, p2):
         """
@@ -391,46 +504,25 @@ if __name__ == '__main__':
     Add more depots.
     """
     tic = time.time()
-    n = 25
-    BB = BetterBus()
-    stops = sk_cl.MiniBatchKMeans(n_clusters=n).fit(BB.arr).cluster_centers_
-    tsp, pos = BB.christofides(stops, show_steps=True)
+    n_stops = 25
+    bb = BetterBus()
+    mbkm = sk_cl.MiniBatchKMeans(n_clusters=n_stops)
+    stops = mbkm.fit(bb.arr).cluster_centers_
+    tsp, pos = bb.christofides(stops, show_final=False)
+    n_buses = 10
+    score_avg, score_std = bb.performance(tsp, pos, n_buses, reps=1)
+
+    """
+    For each simulation pop:
+    Pick start time
+    Pick start and end points
+    Find closest bus stop to start and end
+    Calculate best bus for trip
+    Calculate pickup and dropoff times
+    Get distance from start to first stop, convert to time, multiply 1.5x
+    Get time between arrival at stop and bus arrival, multiply 2x
+    Get time traveling, multiply 1x
+    Get distance from last stop to end, convert to time, multiply 1.5x
+    """
     toc = time.time()
     print('Run complete in {0} sec'.format(toc - tic))
-
-    # n_depots = 10
-    # n_buses = 40
-    # n_stops = 200
-    # n_stops_per_depot = n_stops // n_depots
-    # n_buses_per_depot = n_buses // n_depots
-    # n_stops_per_bus = n_stops // n_buses
-    # fig = plt.figure()
-    # ax = plt.subplot(111)
-    # ax.set(adjustable='box', aspect=0.6)
-    # ax.tick_params(axis='both', which='both', bottom='off',
-    #                top='off', labelbottom='off', right='off',
-    #                left='off', labelleft='off')
-    # msg = '{0} n_depots, {1} n_buses_per_depot, {2} n_stops_per_bus'
-    # ax.set_title(msg.format(n_depots, n_buses_per_depot, n_stops_per_bus),
-    #              size=8)
-    # # Draw population (blue)
-    # ax.scatter(BB.arr[:, 0], BB.arr[:, 1], s=0.01, c='#5d8eec')
-    # km_depots = sk_cl.KMeans(n_clusters=n_depots).fit(BB.arr)
-    # depot_tsp, depot_pos = BB.christofides(km_depots)
-    # for clust1 in range(n_depots):
-    #     # Draw depot centers (green)
-    #     ax.scatter(km_depots.cluster_centers_[:, 0],
-    #                km_depots.cluster_centers_[:, 1], s=8, c='#00ff00')
-    #     depot_arr = BB.arr[np.where(km_depots.labels_ == clust1)]
-    #     km_routes = sk_cl.KMeans(n_clusters=n_buses_per_depot).fit(depot_arr)
-    #     for clust2 in range(n_buses_per_depot):
-    #         # Add depot to each route?
-    #         bus_arr = depot_arr[np.where(km_routes.labels_ == clust2)]
-    #         # mst, positions, dist = BB.nx_mst(n_stops_per_bus, bus_arr)
-    #         tsp, pos = BB.christofides(bus_arr)
-    #         # Draw stops (red) and routes (black)
-    #         nx.draw_networkx(tsp, pos, node_color='#f95151',
-    #                          node_size=5, with_labels=False, ax=ax)
-    # plt.savefig('map_d{0}b{1}s{2}.png'.format(n_depots,
-    #                                           n_buses_per_depot,
-    #                                           n_stops_per_bus), dpi=400)
