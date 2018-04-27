@@ -211,6 +211,7 @@ class BetterBus:
         ts = time.time()
         self.gen_timetable(graph, pos, n_buses)
         bus_speed = 40
+        walk_speed = 5
         scores = []
         for _ in range(reps):
             start, end = self.arr[np.random.choice(self.arr.shape[0], 2,
@@ -219,16 +220,16 @@ class BetterBus:
             start = (start[1], start[0])
             end = (end[1], end[0])
             nodelist = list(graph.nodes())
-            start_node = min([(n, self.get_dist(start, pos[n]))
-                              for n in nodelist],
-                             key=lambda x: x[1])[0]
-            end_node = min([(n, self.get_dist(end, pos[n]))
-                            for n in nodelist],
-                           key=lambda x: x[1])[0]
-            print(start, start_node, end, end_node)
+            start_node, walk_dist = min([(n, self.get_dist(start, pos[n]))
+                                         for n in nodelist],
+                                        key=lambda x: x[1])
+            end_node, temp_walk = min([(n, self.get_dist(end, pos[n]))
+                                       for n in nodelist],
+                                      key=lambda x: x[1])
+            walk_dist += temp_walk
+            walk_time = walk_dist * walk_speed
             # TODO: Generate t (start time) randomly
             t = 0
-            walk_time = 0
             min_time = sum([graph.adj[k1][k2]['weight']
                             for k1 in graph.adj for k2 in graph.adj[k1]])
             for row in self.timetable.loc[(self.timetable['node'] == start_node) &
@@ -492,7 +493,7 @@ if __name__ == '__main__':
     Business to business arc = distance
     Pop to business arc = 0.75 * distance
 
-    Methodology:
+    Methodology option:
     Split county into depot regions with k-means.
     Split each depot region into bus regions with k-means.
     TSP heuristic for each bus region.
@@ -504,14 +505,23 @@ if __name__ == '__main__':
     Add more depots.
     """
     tic = time.time()
-    n_stops = 25
+    # n_stops = 25
     bb = BetterBus()
-    mbkm = sk_cl.MiniBatchKMeans(n_clusters=n_stops)
-    stops = mbkm.fit(bb.arr).cluster_centers_
-    tsp, pos = bb.christofides(stops, show_final=False)
-    n_buses = 10
-    score_avg, score_std = bb.performance(tsp, pos, n_buses, reps=1)
-
+    results = []
+    for n_stops in range(25, 101, 25):
+        mbkm = sk_cl.MiniBatchKMeans(n_clusters=n_stops)
+        stops = mbkm.fit(bb.arr).cluster_centers_
+        tsp, pos = bb.christofides(stops, show_final=False)
+        n_buses = n_stops // 2
+        # n_buses = 10
+        r = 1000
+        score_avg, score_std = bb.performance(tsp, pos, n_buses, reps=r)
+        results.append({'n_stops': n_stops,
+                        'n_buses': n_buses,
+                        'reps': r,
+                        'avg_score': score_avg,
+                        'std_score': score_std})
+    res_df = pd.DataFrame(results)
     """
     For each simulation pop:
     Pick start time
